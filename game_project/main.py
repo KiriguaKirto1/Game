@@ -1,6 +1,7 @@
 import os
 import sys
 import pygame
+import zipfile
 
 pygame.init()
 
@@ -32,7 +33,8 @@ WHITE = (255, 255, 255)
 
 
 def error(message):
-    print(f"[ERRO] {message}")
+    # print(f"[ERRO] {message}")  # Silenced for cleaner console
+    pass
 
 
 def asset_path(*parts):
@@ -323,6 +325,11 @@ class Player:
             return
 
         self.lives -= 1
+        
+        # Respawn on hurt
+        self.rect.topleft = (80, 260)
+        self.velocity = pygame.Vector2(0, 0)
+        
         self.invincible_timer = 1000
         self.velocity.y = -8
         self.set_state("hurt")
@@ -486,18 +493,27 @@ class Game:
         self.font = pygame.font.SysFont("arial", 19, bold=True)
         self.big_font = pygame.font.SysFont("arial", 54, bold=True)
 
+        # Auto-unpack assets if incomplete
+        if os.path.exists('assets.zip'):
+            idle_dir = asset_path('player', 'idle')
+            if not os.path.exists(idle_dir) or not os.listdir(idle_dir):
+                print("Unpacking assets.zip...")
+                with zipfile.ZipFile('assets.zip', 'r') as zf:
+                    zf.extractall('.')
+                print("Assets unpacked!")
+
         self.load_assets()
         self.reset()
 
     def load_assets(self):
-        background_file = find_first_image(asset_path("background"))
-
-        if background_file:
-            background = load_image(background_file)
-            self.background = scale_background(background, WIDTH, HEIGHT)
-        else:
-            self.background = pygame.Surface((WIDTH, HEIGHT))
-            self.background.fill((120, 190, 255))
+        # Procedural gradient sky background (no missing folder error)
+        self.background = pygame.Surface((WIDTH, HEIGHT)).convert()
+        for y in range(HEIGHT):
+            r = max(50, 120 - y // 4)
+            g = max(140, 190 - y // 5)
+            b = max(200, 255 - y // 6)
+            color = (r, g, b)
+            pygame.draw.line(self.background, color, (0, y), (WIDTH, y))
 
         platform_file = find_image_by_names(
             asset_path("platforms"),
@@ -567,6 +583,7 @@ class Game:
         ground_y = 454
 
         self.player = Player(90, 260)
+        self.player.lives = 3
 
         self.platforms = [
             Platform(0, ground_y, 620, self.platform_image),
@@ -632,7 +649,7 @@ class Game:
             if self.player.rect.colliderect(hazard.hitbox):
                 self.player.hurt()
 
-        if self.player.rect.colliderect(self.flag.rect.inflate(-45, -20)):
+        if self.player.rect.colliderect(self.flag.rect.inflate(-25, -15)):
             self.won = True
 
         self.camera.update(self.player.rect)
@@ -712,6 +729,8 @@ class Game:
                     if event.key == pygame.K_ESCAPE:
                         pygame.quit()
                         sys.exit()
+                    elif event.key == pygame.K_F11:
+                        pygame.display.toggle_fullscreen()
 
             self.update(dt)
             self.draw()
